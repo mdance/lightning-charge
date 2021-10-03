@@ -84,8 +84,110 @@ module.exports = (db, ln) => {
       !err ? { requested_at: now(), success: true,  resp_code: res.status }
            : { requested_at: now(), success: false, resp_error: err })
 
+  const newOffer = async props => {
+    const { webhook } = props;
+    let { metadata } = props;
+
+    const map = {
+      amount: {
+        prefix: '',
+        wrap: false,
+      },
+      description: {
+        prefix: '',
+        default: 'Lightning Charge Offer',
+        wrap: false,
+      },
+      vendor: {
+        prefix: '',
+        wrap: false,
+      },
+      label: {
+        prefix: '',
+        wrap: false,
+      },
+      quantity_min: {},
+      quantity_max: {},
+      absolute_expiry: {},
+      recurrence: {},
+      recurrence_base: {},
+      recurrence_paywindow: {},
+      recurrence_limit: {},
+      single_use: {},
+    };
+
+    let amount = 'any';
+    let quoted_currency = '';
+    let quoted_amount = '';
+
+    if (props.currency && props.amount) {
+      quoted_currency = props.currency;
+      quoted_amount = props.amount;
+
+      //amount = await toMsat(quoted_currency, quoted_amount);
+      amount = quoted_amount + quoted_currency;
+    } else if (props.amount) {
+      amount = props.amount;
+    } else if (props.msatoshi) {
+      amount = props.msatoshi;
+    }
+
+    props.amount = amount;
+
+    let offer = {};
+    const args = [];
+
+    for (const [key, info] of Object.entries(map)) {
+      let value = props[key];
+      const wrap = typeof info.wrap != 'undefined' ? info.wrap : true;
+      const prefix = typeof info.prefix != 'undefined' ? info.prefix : `${key}=`;
+      const suffix = typeof info.suffix != 'undefined' ? info.suffix : '';
+
+      if (typeof value === 'undefined') {
+        if (info.default) {
+          value = info.default;
+        } else {
+          continue;
+        }
+      }
+       
+      offer[key] = value;
+
+      value += suffix;
+
+      if (wrap) {
+        value = `"${value}"`;
+      }
+
+      args.push(`${prefix}${value}`);
+    }
+
+    const response = await ln.offer.apply(ln, args);
+
+    const id = nanoid();
+    metadata = JSON.stringify(metadata || null);
+
+    if (response && response.offer_id) {
+      offer = {
+        ...offer,
+        ...response,
+        quoted_amount,
+        quoted_currency,
+        metadata,
+        created_at: now()
+      }
+
+      debug('saving offer:', offer)
+      await db('offer').insert(offer)
+
+      if (webhook) await addHook(id, webhook)
+
+      return format(offer)
+    }
+  }
+
   return { newInvoice, listInvoices, fetchInvoice, delInvoice
          , getLastPaid, markPaid, delExpired
-         , addHook, getHooks, logHook }
+         , addHook, getHooks, logHook, newOffer }
 }
 

@@ -36,6 +36,7 @@ const lnPath   = process.env.LN_PATH || join(require('os').homedir(), '.lightnin
   app.get('/info', auth, wrap(async (req, res) => res.send(await ln.getinfo())))
 
   require('./invoicing')(app, payListen, model, auth, lnconf)
+  require('./offers')(app, payListen, model, auth, lnconf)
   require('./checkout')(app, payListen)
 
   require('./sse')(app, payListen, auth)
